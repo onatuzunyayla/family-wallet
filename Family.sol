@@ -17,6 +17,12 @@ contract MultiSigWallet {
 
     uint constant MIN_SIGNATURES = 2;                           // Min required approvals for a transaction to happen
     uint private _transactionIdx;                               // Transaction index id, incremented after each transaction
+    
+    // Wallet shares among members
+    uint private spouse1Share;
+    uint private spouse2Share;
+    uint private childrenShare;
+    uint private childrenCount;
 
     // Struct to hold information about a transaction
     struct Transaction {
@@ -25,6 +31,13 @@ contract MultiSigWallet {
       uint amount;
       uint8 signatureCount;
       mapping (address => uint8) signatures;                    // (1 or 0) To check if a person has signed or not
+    }
+
+    struct Member {
+        address wallet;
+        uint share;
+        bool isSpouse;
+
     }
 
     mapping (uint => Transaction) private _transactions;                // Active transactions
