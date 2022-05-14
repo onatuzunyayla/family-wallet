@@ -1,8 +1,3 @@
-// Multi signature Family Wallet
-// Author(s):
-//          - Mustafa Gokturk Yandim
-//
-// Sabanci University - 2022
 
 pragma solidity ^0.4.0;
 
