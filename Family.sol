@@ -1,3 +1,4 @@
+
 pragma solidity ^0.4.0;
 
 contract MultiSigWallet {
@@ -6,9 +7,6 @@ contract MultiSigWallet {
     // DEFINITIONS
 
     address private _owner;                                     // Address of the contract deployer
-    //mapping(address => uint8) private _owners;                  // Parent/Owners address list / Mapped to uint8 (1 or 0) to hold active/inactive owner wallets
-    //mapping(address => uint8) private _children;                // Children address list / Mapped to uint8 (1 or 0) to hold active/inactive child wallets
-
     uint constant MIN_SIGNATURES = 2;                           // Min required approvals for a transaction to happen
     uint private _transactionIdx;                               // Transaction index id, incremented after each transaction
 
@@ -82,7 +80,7 @@ contract MultiSigWallet {
 
     // Add a new child wallet 
     function addChild(address child) isOwner public {
-        addMember(msg.sender,0,false,true);
+        addMember(child,0,false,true);
         emit childAdded(msg.sender,child);                                                      // Log that a new child was added
     }
 
@@ -187,12 +185,12 @@ contract MultiSigWallet {
     // VIEW FUNCTIONS
 
     // Retrieve the balance of the contract
-    function walletBalance() constant public returns (uint) {
+    function walletBalance()  public view returns (uint) {
       return address(this).balance;
     }
 
     // View pending transactions
-    function getPendingTransactions() view isOwner public returns (uint[]) {
+    function getPendingTransactions()  public view returns (uint[]) {
       return _pendingTransactions;
     }
 }
