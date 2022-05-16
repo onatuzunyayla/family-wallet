@@ -6,23 +6,24 @@ contract MultiSigWallet {
     // ##############################################################################################################################
     // DEFINITIONS
 
-    address private _owner;                                     // Address of the contract deployer
-    uint constant MIN_SIGNATURES = 2;                           // Min required approvals for a transaction to happen
-    uint private _transactionIdx;                               // Transaction index id, incremented after each transaction
+    address private _owner;                     // Kontartı başlatan adres
+    uint constant MIN_SIGNATURES = 2;           // İşlemlerin onayı için gereken minimum onay sayısı
+    uint private _transactionIdx;               // İşlem numarası
 
-    // Struct to hold information about a transaction
+    // Ödeme bilgilerini tutan veri yapısı
     struct Transaction {
-      address from;
-      address to;
-      uint amount;
-      uint8 signatureCount;
-      mapping (address => uint8) signatures;                    // (1 or 0) To check if a person has signed or not
+      address from;                                 // Gönderen adres
+      address to;                                   // Alıcı adres
+      uint amount;                                  // Miktar
+      uint8 signatureCount;                         // İmza sayısı
+      mapping (address => uint8) signatures;        // (1 veya 0) işlem onaylandı mı
     }
 
+    // Aile bireylerini tutan veri yapısı
     struct Member {
-        uint share;
-        bool isSpouse;
-        bool isActive;
+        uint share;             // Cüzdandaki % payı
+        bool isSpouse;          // Yetkili mi
+        bool isActive;          // Aktif bir kullanıcı mı
     }
 
     mapping(address => Member) private _members;
@@ -59,46 +60,47 @@ contract MultiSigWallet {
         _;
     }
 
+
+    // Yeni bir üye ekle
     function addMember(address caller, uint _share, bool _isSpouse, bool _isActive) private {
-        
-        // Initialize a new member
         Member memory new_member;
         new_member.share = _share;
         new_member.isSpouse = _isSpouse;
         new_member.isActive = _isActive;
-
         _members[caller] = new_member;
     }
 
+    // Yeni yetkili Üye ekle
     function addOwner(address owner) isOwner public {
         addMember(owner,0,true,true);
     }
 
+    // Yetkili üye kaldır
     function removeOwner(address owner) isOwner public {
         _members[owner].isActive = false;
     }
 
-    // Add a new child wallet 
+    // Yeni çocuk üye ekle
     function addChild(address child) isOwner public {
         addMember(child,0,false,true);
-        emit childAdded(msg.sender,child);                                                      // Log that a new child was added
+        emit childAdded(msg.sender,child);           // Yeni bir çocuk eklendi mesajı
     }
 
-    // Remove a child wallet 
+    // Çocuk üyeyi kaldır
     function removeChild (address child) isOwner public {
         _members[child].isActive = false;
     }
 
 
     // ##############################################################################################################################
-    // TRANSACTIONS
+    // İşlemler
 
-    // Add(deposit) money to contract
+    // Kontrata varlık ekle
     function () public payable {
         emit DepositFunds(msg.sender, msg.value);                                   // Log that a deposit was made
     }
 
-    // TO DO: We can put limitation to withdrawal for kids here using a modifier
+    // Kontrattan varlık çek
     function withdraw(uint amount) public {
         transferTo(msg.sender, amount);
     }
@@ -111,52 +113,50 @@ contract MultiSigWallet {
         _;
     }
 
-    // Transfer from contract balance to a given address
+    // Kontrat varlıklarını belirtilen hesaba aktar
     function transferTo(address to, uint amount) validUser public {
 
-        // TO DO: We can put limitation to transfer for kids here using a modifier
-        
         require(address(this).balance >= amount);
-        uint transactionId = _transactionIdx++;                                     // Increase the transaction index
+        uint transactionId = _transactionIdx++;          // İşlem numarasını güncelle
 
-        // Initialize a new transaction
+        // yeni bir işlem oluştur
         Transaction memory transaction;
         transaction.from = msg.sender;
         transaction.to = to;
         transaction.amount = amount;
 
-        // Sign the transaction (+1) if the caller is a spouse/owner
+        // İşlemi +1 onay ver (yetkili kişi ise)
         if (_members[msg.sender].isSpouse){
             transaction.signatureCount = 1;
-        } else {    // Children can not sign a transaction themselves
+        } else {    // Çocuklar kendi başlarına onay veremezler
             transaction.signatureCount = 0;
         }
 
         _transactions[transactionId] = transaction;
         _pendingTransactions.push(transactionId);
 
-        emit TransactionCreated(msg.sender, to, amount, transactionId);             // Log that a new transaction was created
+        emit TransactionCreated(msg.sender, to, amount, transactionId);             
     }
 
 
-    // Sign/approve a transaction
+    // Transfer işlemini onayla
     function signTransaction(uint transactionId) isOwner public {
 
       Transaction storage transaction = _transactions[transactionId];
 
-      require(0x0 != transaction.from);                                     // Transaction must exist
-      require(msg.sender != transaction.from);                              // Creator cannot sign the transaction
-      require(transaction.signatures[msg.sender] != 1);                     // Cannot sign a transaction more than once
+      require(0x0 != transaction.from);                                     // Tİşlem var mı kontrol et
+      require(msg.sender != transaction.from);                              // İşlemi oluşturan onay veremez
+      require(transaction.signatures[msg.sender] != 1);                     // Aynı kişinin imzalamasını engelle
 
       transaction.signatures[msg.sender] = 1;
       transaction.signatureCount++;
 
-      emit TransactionSigned(msg.sender, transactionId);                    // Log that a transaction was signed
+      emit TransactionSigned(msg.sender, transactionId);                    
 
       if (transaction.signatureCount >= MIN_SIGNATURES) {
         require(address(this).balance >= transaction.amount);
         transaction.to.transfer(transaction.amount);
-        emit TransactionCompleted(transaction.from, transaction.to, transaction.amount, transactionId); // Log that a transaction is completed
+        emit TransactionCompleted(transaction.from, transaction.to, transaction.amount, transactionId); 
         deleteTransaction(transactionId);
       }
     }
