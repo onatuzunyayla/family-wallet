@@ -7,17 +7,8 @@ contract MultiSigWallet {
     // DEFINITIONS
 
     address private _owner;                                     // Address of the contract deployer
-    mapping(address => uint8) private _owners;                  // Parent/Owners address list / Mapped to uint8 (1 or 0) to hold active/inactive owner wallets
-    mapping(address => uint8) private _children;                // Children address list / Mapped to uint8 (1 or 0) to hold active/inactive child wallets
-
     uint constant MIN_SIGNATURES = 2;                           // Min required approvals for a transaction to happen
     uint private _transactionIdx;                               // Transaction index id, incremented after each transaction
-    
-    // Wallet shares among members
-    uint private spouse1Share;
-    uint private spouse2Share;
-    uint private childrenShare;
-    uint private childrenCount;
 
     // Struct to hold information about a transaction
     struct Transaction {
@@ -29,15 +20,14 @@ contract MultiSigWallet {
     }
 
     struct Member {
-        address wallet;
         uint share;
         bool isSpouse;
-
+        bool isActive;
     }
 
+    mapping(address => Member) private _members;
     mapping (uint => Transaction) private _transactions;                // Active transactions
     uint[] private _pendingTransactions;                                // Holds the index of pending transaction(s)
-
 
     // ##############################################################################################################################
     // EVENTS (LOGGING)
@@ -58,33 +48,45 @@ contract MultiSigWallet {
     // Constructor
     constructor() public {
         _owner = msg.sender;
+        addMember(msg.sender,1,true,true);
     }
 
     // -- MODIFIER:
     // Check the address if it is one of owners/parents
     // Accessibility: only Owners/Parents 
     modifier isOwner() {                                                                         
-        require(msg.sender == _owner || _owners[msg.sender] == 1);    
+        require(_members[msg.sender].isSpouse == true);    
         _;
     }
 
+    function addMember(address caller, uint _share, bool _isSpouse, bool _isActive) private {
+        
+        // Initialize a new member
+        Member memory new_member;
+        new_member.share = _share;
+        new_member.isSpouse = _isSpouse;
+        new_member.isActive = _isActive;
+
+        _members[caller] = new_member;
+    }
+
     function addOwner(address owner) isOwner public {
-        _owners[owner] = 1;
+        addMember(owner,0,true,true);
     }
 
     function removeOwner(address owner) isOwner public {
-        _owners[owner] = 0;
+        _members[owner].isActive = false;
     }
 
     // Add a new child wallet 
     function addChild(address child) isOwner public {
-        _children[child] = 1;
+        addMember(child,0,false,true);
         emit childAdded(msg.sender,child);                                                      // Log that a new child was added
     }
 
     // Remove a child wallet 
     function removeChild (address child) isOwner public {
-        _children[child] = 0;
+        _members[child].isActive = false;
     }
 
 
@@ -105,7 +107,7 @@ contract MultiSigWallet {
     // Check the address if it is one of owners or children
     // Accessibility: Owners/Parents and Children
     modifier validUser() {                                                                         
-        require(msg.sender == _owner || _owners[msg.sender] == 1 || _children[msg.sender] == 1);    
+        require( _members[msg.sender].isActive == true);    
         _;
     }
 
@@ -123,8 +125,8 @@ contract MultiSigWallet {
         transaction.to = to;
         transaction.amount = amount;
 
-        // Sign the transaction (+1) if the caller is an owner
-        if (msg.sender == _owner || _owners[msg.sender] == 1){
+        // Sign the transaction (+1) if the caller is a spouse/owner
+        if (_members[msg.sender].isSpouse){
             transaction.signatureCount = 1;
         } else {    // Children can not sign a transaction themselves
             transaction.signatureCount = 0;
@@ -183,12 +185,12 @@ contract MultiSigWallet {
     // VIEW FUNCTIONS
 
     // Retrieve the balance of the contract
-    function walletBalance() constant public returns (uint) {
+    function walletBalance()  public view returns (uint) {
       return address(this).balance;
     }
 
     // View pending transactions
-    function getPendingTransactions() view isOwner public returns (uint[]) {
+    function getPendingTransactions()  public view returns (uint[]) {
       return _pendingTransactions;
     }
 }
