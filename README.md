@@ -1,6 +1,5 @@
-# Aile Ekonomisi için
-Merkezsiz Yönetim Sistemi Önerisi:
-Meta FEM (Family Economy Management) #
+# Aile Ekonomisi için Merkezsiz Yönetim Sistemi Önerisi: #
+## Meta FEM (Family Economy Management) ##
 
 Günümüzde blok zinciri teknolojisi, sanal evren ve nitelikli fikri tapu gibi yeni dijital uygulamalar veya sistemlere
 artan ilgi
@@ -25,3 +24,5 @@ gizleme ve kaçırma gibi blokzincir istismarına yol açabilir.
 3. Blokzincir ve kripto para teknolojilerinin para aklama ve benzeri suçlarla
 adının anılması ise bu teknolojinin itibarı ve geleceğinin lekelenmesine
 yol açmaktadır.
+
+![diagram-tr](https://user-images.githubusercontent.com/86969996/170356683-c4657eda-72d5-4add-b4ba-2de142da96b6.JPG)
