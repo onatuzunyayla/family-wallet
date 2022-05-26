@@ -26,10 +26,13 @@ contract MultiSigWallet {
         bool isActive;          // Aktif bir kullanıcı mı
     }
 
-    mapping(address => Member) private members;                        // Üyeler
-    mapping (uint => Transaction) private transactions;                // Aktif transferler
-    uint[] private pendingTransactions;                                // Beklemedeki transferlerin numarasi tutuluyor
+    mapping(address => Member) private members;                         // Üyeler
+    mapping (uint => Transaction) private transactions;                 // Aktif transferler
+    mapping (address => bool) private divorceSigned;                   // Aktif transferler
+
+    uint[] private pendingTransactions;                                 // Beklemedeki transferlerin numarasi tutuluyor
     address[] private activeMemberAddresses;
+    uint8 divorceSignatureCount;
 
     // ##############################################################################################################################
     // EVENTS (LOGGING)
@@ -42,7 +45,6 @@ contract MultiSigWallet {
     event TransactionCompleted(address from, address to, uint amount, uint transactionId);
     event TransactionSigned(address by, uint transactionId);
     event childAdded(address owner, address child);
-
 
     // ##############################################################################################################################
     // CONTRACT CONTROL
@@ -83,7 +85,7 @@ contract MultiSigWallet {
 
     // Yetkili üye kaldır
     function removeOwner(address _owner) isOwner public {
-        members[owner].isActive = false;
+        members[_owner].isActive = false;
         activeMembers -= 1;
     }
 
@@ -148,9 +150,9 @@ contract MultiSigWallet {
 
 
     // Transfer işlemini onayla
-    function signTransaction(uint transactionId) isOwner public {
+    function signTransaction(uint _transactionId) isOwner public {
 
-      Transaction storage transaction = transactions[transactionId];
+      Transaction storage transaction = transactions[_transactionId];
 
       require(0x0 != transaction.from);                                     // İşlem var mı kontrol et
       require(msg.sender != transaction.from);                              // İşlemi oluşturan onay veremez
@@ -159,17 +161,17 @@ contract MultiSigWallet {
       transaction.signatures[msg.sender] = 1;
       transaction.signatureCount++;
 
-      emit TransactionSigned(msg.sender, transactionId);                    
+      emit TransactionSigned(msg.sender, _transactionId);                    
 
       if (transaction.signatureCount >= MIN_SIGNATURES) {
         require(address(this).balance >= transaction.amount);
         transaction.to.transfer(transaction.amount);
-        emit TransactionCompleted(transaction.from, transaction.to, transaction.amount, transactionId); 
-        deleteTransaction(transactionId);
+        emit TransactionCompleted(transaction.from, transaction.to, transaction.amount, _transactionId); 
+        deleteTransaction(_transactionId);
       }
     }
 
-    function deleteTransaction(uint transactionId) validUser public {
+    function deleteTransaction(uint _transactionId) validUser public {
     
         uint8 replace = 0;
 
@@ -178,7 +180,7 @@ contract MultiSigWallet {
         for(uint i = 0; i < pendingTransactions.length; i++) {
             if (1 == replace) {
             pendingTransactions[i-1] = pendingTransactions[i];
-            } else if (transactionId == pendingTransactions[i]) {
+            } else if (_transactionId == pendingTransactions[i]) {
             replace = 1;
             }
         }
@@ -186,17 +188,30 @@ contract MultiSigWallet {
         assert(replace == 1);                                                   // Protection when replace = 0
         delete pendingTransactions[pendingTransactions.length - 1];             // Delete the last elements
         pendingTransactions.length--;                                           // Update
-        delete transactions[transactionId];                                     // Deleting from a mapping
+        delete transactions[_transactionId];                                     // Deleting from a mapping
     }
 
-    // TO DO: Divorce needs to be approved by spouses or lawyers
     // TO DO: Find a way to delete an activeMember address
     function divorce() isOwner public{
+        require(divorceSignatureCount >= MIN_SIGNATURES);
+
         uint share = address(this).balance / activeMembers;
 
         for (uint i = 0; i < activeMemberAddresses.length; i++){
             activeMemberAddresses[i].transfer(share);
         }
+    }
+
+    function signDivorce() isOwner public {
+        require(divorceSigned[msg.sender] == false);
+        divorceSigned[msg.sender] = true;
+        divorceSignatureCount++;
+    }
+
+    function unsignDivorce() isOwner public {
+        require(divorceSigned[msg.sender] == true);
+        divorceSigned[msg.sender] = false;
+        divorceSignatureCount--;
     }
 
     // ##############################################################################################################################
@@ -218,5 +233,9 @@ contract MultiSigWallet {
 
     function getActiveMembers() public view returns (address[]) {
         return activeMemberAddresses;
+    }
+
+    function divorceSignCount() public view returns (uint8) {
+        return divorceSignatureCount;
     }
 }
