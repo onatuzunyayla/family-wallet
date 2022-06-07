@@ -3,12 +3,12 @@ pragma solidity ^0.4.0;
 contract MultiSigWallet {
 
     // ##############################################################################################################################
-    // DEFINITIONS
+    // Değişken tanımlamaları
 
     address private owner;                      // Kontratı başlatan adres
     uint constant MIN_SIGNATURES = 2;           // İşlemlerin onayı için gereken minimum onay sayısı
     uint private transactionIdx;                // İşlem numarası
-    uint private activeMembers;
+    uint private activeMembers;                 // Kontrattakı aktif üye sayısı
 
     // Ödeme bilgilerini tutan veri yapısı
     struct Transaction {
@@ -26,16 +26,18 @@ contract MultiSigWallet {
         bool isActive;          // Aktif bir kullanıcı mı
     }
 
-    mapping(address => Member) private members;                        // Üyeler
-    mapping (uint => Transaction) private transactions;                // Aktif transferler
-    uint[] private pendingTransactions;                                // Beklemedeki transferlerin numarasi tutuluyor
+    mapping(address => Member) private members;                             // Üyeler
+    mapping (uint => Transaction) private transactions;                     // Aktif transferler
+    mapping (address => bool) private divorceSigned;                        // Aktif transferler
+
+    uint[] private pendingTransactions;                                     // Beklemedeki transferlerin numarasi tutuluyor
     address[] private activeMemberAddresses;
+    uint8 divorceSignatureCount;
 
     // ##############################################################################################################################
     // EVENTS (LOGGING)
-    // :    "event" saves events in a log.
-    // :    Useful to check what happened before
-    // :    Logs can be accessed in WEB3 javascript implementation
+    // :    "event" tanımlamaları gerçekleşen olayları kayıt defterine kaydediyor.
+    // :    Kayıtlar WEB3 javascript ile görüntelenebilir
 
     event DepositFunds(address from, uint amount);
     event TransactionCreated(address from, address to, uint amount, uint transactionId);
@@ -43,9 +45,8 @@ contract MultiSigWallet {
     event TransactionSigned(address by, uint transactionId);
     event childAdded(address owner, address child);
 
-
     // ##############################################################################################################################
-    // CONTRACT CONTROL
+    // Kontrat Kontrol yapılari
 
     // Constructor
     constructor() public {
@@ -55,8 +56,8 @@ contract MultiSigWallet {
     }
 
     // -- MODIFIER:
-    // Check the address if it is one of owners/parents
-    // Accessibility: only Owners/Parents 
+    // Çağıran adresin yetkisini kontrol ediyor
+    // Erişebilirlik: kontrat sahibi ve yetkili üyeler
     modifier isOwner() {                                                                         
         require(members[msg.sender].isSpouse == true);    
         _;
@@ -75,6 +76,14 @@ contract MultiSigWallet {
         }
     }
 
+    // TO DO: 
+    // Create a function to remove Member addresses from activeMembers
+    // 
+    // function removeMember
+    //
+    //
+    //
+
     // Yeni yetkili Üye ekle
     function addOwner(address _new_owner) isOwner public {
         addMember(_new_owner,0,true,true);
@@ -83,8 +92,9 @@ contract MultiSigWallet {
 
     // Yetkili üye kaldır
     function removeOwner(address _owner) isOwner public {
-        members[owner].isActive = false;
+        members[_owner].isActive = false;
         activeMembers -= 1;
+        // removeMember()
     }
 
     // Yeni çocuk üye ekle
@@ -98,6 +108,7 @@ contract MultiSigWallet {
     function removeChild (address _child) isOwner public {
         members[_child].isActive = false;
         activeMembers -= 1;
+        // removeMember()
     }
 
     // ##############################################################################################################################
@@ -105,7 +116,7 @@ contract MultiSigWallet {
 
     // Kontrata varlık ekle
     function () public payable {
-        emit DepositFunds(msg.sender, msg.value);                                   // Log that a deposit was made
+        emit DepositFunds(msg.sender, msg.value);                                   // Depozito işlemini kayıt defterine ekle
     }
 
     // Kontrattan varlık çek
@@ -114,8 +125,8 @@ contract MultiSigWallet {
     }
 
     // -- MODIFIER:
-    // Check the address if it is one of owners or children
-    // Accessibility: Owners/Parents and Children
+    // Çağıran adresin aktif bir üye olduğunu kontrol et
+    // Erişebilirlik: aktif üyeler
     modifier validUser() {                                                                         
         require( members[msg.sender].isActive == true);    
         _;
@@ -148,28 +159,28 @@ contract MultiSigWallet {
 
 
     // Transfer işlemini onayla
-    function signTransaction(uint transactionId) isOwner public {
+    function signTransaction(uint _transactionId) isOwner public {
 
-      Transaction storage transaction = transactions[transactionId];
+      Transaction storage transaction = transactions[_transactionId];
 
-      require(0x0 != transaction.from);                                     // İşlem var mı kontrol et
+      require(0x0 != transaction.from);                                     // Böyle bir işlem var mı kontrol et
       require(msg.sender != transaction.from);                              // İşlemi oluşturan onay veremez
       require(transaction.signatures[msg.sender] != 1);                     // Aynı kişinin imzalamasını engelle
 
       transaction.signatures[msg.sender] = 1;
       transaction.signatureCount++;
 
-      emit TransactionSigned(msg.sender, transactionId);                    
+      emit TransactionSigned(msg.sender, _transactionId);                    
 
       if (transaction.signatureCount >= MIN_SIGNATURES) {
         require(address(this).balance >= transaction.amount);
         transaction.to.transfer(transaction.amount);
-        emit TransactionCompleted(transaction.from, transaction.to, transaction.amount, transactionId); 
-        deleteTransaction(transactionId);
+        emit TransactionCompleted(transaction.from, transaction.to, transaction.amount, _transactionId); 
+        deleteTransaction(_transactionId);
       }
     }
 
-    function deleteTransaction(uint transactionId) validUser public {
+    function deleteTransaction(uint _transactionId) validUser public {
     
         uint8 replace = 0;
 
@@ -178,20 +189,21 @@ contract MultiSigWallet {
         for(uint i = 0; i < pendingTransactions.length; i++) {
             if (1 == replace) {
             pendingTransactions[i-1] = pendingTransactions[i];
-            } else if (transactionId == pendingTransactions[i]) {
+            } else if (_transactionId == pendingTransactions[i]) {
             replace = 1;
             }
         }
 
         assert(replace == 1);                                                   // Protection when replace = 0
-        delete pendingTransactions[pendingTransactions.length - 1];             // Delete the last elements
-        pendingTransactions.length--;                                           // Update
-        delete transactions[transactionId];                                     // Deleting from a mapping
+        delete pendingTransactions[pendingTransactions.length - 1];             // Son elementi sil
+        pendingTransactions.length--;                                           // Güncelle
+        delete transactions[_transactionId];                                    // Deleting from a mapping
     }
 
-    // TO DO: Divorce needs to be approved by spouses or lawyers
     // TO DO: Find a way to delete an activeMember address
     function divorce() isOwner public{
+        require(divorceSignatureCount >= MIN_SIGNATURES);
+
         uint share = address(this).balance / activeMembers;
 
         for (uint i = 0; i < activeMemberAddresses.length; i++){
@@ -199,24 +211,45 @@ contract MultiSigWallet {
         }
     }
 
+    // Boşanma için imza at
+    function signDivorce() isOwner public {
+        require(divorceSigned[msg.sender] == false);
+        divorceSigned[msg.sender] = true;
+        divorceSignatureCount++;
+    }
+
+    // Boşanma imzasını geri al
+    function unsignDivorce() isOwner public {
+        require(divorceSigned[msg.sender] == true);
+        divorceSigned[msg.sender] = false;
+        divorceSignatureCount--;
+    }
+
     // ##############################################################################################################################
-    // VIEW FUNCTIONS
+    // Görüntüleyici Fonksiyonlar
 
     // Retrieve the balance of the contract
     function walletBalance()  public view returns (uint) {
         return address(this).balance;
     }
 
-    // View pending transactions
+    // Bekleyen transferleri görüntüle
     function getPendingTransactions()  public view returns (uint[]) {
         return pendingTransactions;
     }
 
+    // Aktif üye sayısını görüntüle
     function getActiveMemberCount() public view returns (uint) {
         return activeMembers;
     }
 
+    // Aktif üye adreslerine görüntüle
     function getActiveMembers() public view returns (address[]) {
         return activeMemberAddresses;
+    }
+
+    // Boşanma imza sayısını görüntüle
+    function divorceSignCount() public view returns (uint8) {
+        return divorceSignatureCount;
     }
 }
